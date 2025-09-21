@@ -109,7 +109,7 @@ function createBot() {
                } else {
                   i++;
                }
-            }, delay * 1000);
+            }, delay * 10000);
          } else {
             messages.forEach((msg) => {
                bot.chat(msg);
