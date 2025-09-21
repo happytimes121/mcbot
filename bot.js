@@ -1,276 +1,176 @@
-const mineflayer = require('mineflayer')
-const fs = require('fs')
+const mineflayer = require('mineflayer');
+const Movements = require('mineflayer-pathfinder').Movements;
+const pathfinder = require('mineflayer-pathfinder').pathfinder;
+const { GoalBlock } = require('mineflayer-pathfinder').goals;
 
-// Load configuration
-let config
-try {
-  config = JSON.parse(fs.readFileSync('config.json', 'utf8'))
-} catch (error) {
-  console.error('Error loading config.json:', error.message)
-  process.exit(1)
-}
+const config = require('./settings.json');
+const express = require('express');
 
-let bot = null
-let reconnectTimeout = null
-let movementInterval = null
-let chatInterval = null
-let retryCount = 0
-let isAuthenticated = false
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send('Bot has arrived');
+});
+
+app.listen(8000, () => {
+  console.log('Server started');
+});
 
 function createBot() {
-  console.log(`Attempting to connect to ${config.server.host}:${config.server.port}...`)
-  
-  bot = mineflayer.createBot({
-    host: config.server.host,
-    port: config.server.port,
-    username: config.bot.username,
-    auth: config.bot.auth,
-    version: config.server.version
-  })
+   const bot = mineflayer.createBot({
+      username: config['bot-account']['username'],
+      password: config['bot-account']['password'],
+      auth: config['bot-account']['type'],
+      host: config.server.ip,
+      port: config.server.port,
+      version: config.server.version,
+   });
 
-  bot.on('login', () => {
-    console.log(`✓ Bot logged in as ${bot.username}`)
-    retryCount = 0
-    isAuthenticated = false
-  })
+   bot.loadPlugin(pathfinder);
+   const mcData = require('minecraft-data')(bot.version);
+   const defaultMove = new Movements(bot, mcData);
+   bot.settings.colorsEnabled = false;
 
-  bot.on('spawn', () => {
-    console.log('✓ Bot spawned in the world')
-    console.log(`Position: ${bot.entity.position}`)
-    
-    if (config.antiAfk.enabled) {
-      startAntiAfkFeatures()
-    }
-  })
+   let pendingPromise = Promise.resolve();
 
-  bot.on('chat', (username, message) => {
-    if (username === bot.username) return
-    console.log(`[CHAT] ${username}: ${message}`)
-    
-    if (config.crackedAuth.enabled && !isAuthenticated) {
-      handleAuthentication(message)
-    }
-  })
+   function sendRegister(password) {
+      return new Promise((resolve, reject) => {
+         bot.chat(`/register ${password} ${password}`);
+         console.log(`[Auth] Sent /register command.`);
 
-  bot.on('error', (err) => {
-    console.error('❌ Bot error:', err.message)
-  })
+         bot.once('chat', (username, message) => {
+            console.log(`[ChatLog] <${username}> ${message}`); // Log all chat messages
 
-  bot.on('end', (reason) => {
-    console.log('❌ Bot disconnected:', reason)
-    handleDisconnect()
-  })
+            // Check for various possible responses
+            if (message.includes('successfully registered')) {
+               console.log('[INFO] Registration confirmed.');
+               resolve();
+            } else if (message.includes('already registered')) {
+               console.log('[INFO] Bot was already registered.');
+               resolve(); // Resolve if already registered
+            } else if (message.includes('Invalid command')) {
+               reject(`Registration failed: Invalid command. Message: "${message}"`);
+            } else {
+               reject(`Registration failed: unexpected message "${message}".`);
+            }
+         });
+      });
+   }
 
-  bot.on('kicked', (reason) => {
-    console.log('❌ Bot was kicked:', reason)
-  })
+   function sendLogin(password) {
+      return new Promise((resolve, reject) => {
+         bot.chat(`/login ${password}`);
+         console.log(`[Auth] Sent /login command.`);
 
-  bot.on('death', () => {
-    if (config.antiAfk.handleDeath) {
-      console.log('💀 Bot died, respawning...')
-      setTimeout(() => {
-        bot.respawn()
-      }, 2000)
-    }
-  })
-}
+         bot.once('chat', (username, message) => {
+            console.log(`[ChatLog] <${username}> ${message}`); // Log all chat messages
 
-// =====================
-// Authentication (cracked servers)
-// =====================
-function handleAuthentication(message) {
-  if (!config.crackedAuth.enabled) return
-  
-  const password = process.env[config.crackedAuth.passwordEnvVar]
-  if (!password) {
-    console.log('⚠️ No cracked password found in env var:', config.crackedAuth.passwordEnvVar)
-    return
-  }
+            if (message.includes('successfully logged in')) {
+               console.log('[INFO] Login successful.');
+               resolve();
+            } else if (message.includes('Invalid password')) {
+               reject(`Login failed: Invalid password. Message: "${message}"`);
+            } else if (message.includes('not registered')) {
+               reject(`Login failed: Not registered. Message: "${message}"`);
+            } else {
+               reject(`Login failed: unexpected message "${message}".`);
+            }
+         });
+      });
+   }
 
-  const lowerMessage = message.toLowerCase()
-  
-  if (config.crackedAuth.autoRegister && (lowerMessage.includes('register') || lowerMessage.includes('/register'))) {
-    const registerCmd = config.crackedAuth.registerCommand.replace(/{password}/g, password)
-    bot.chat(registerCmd)
-    console.log('📝 Sent registration command')
-    isAuthenticated = true
-  } else if (config.crackedAuth.autoLogin && (lowerMessage.includes('login') || lowerMessage.includes('/login'))) {
-    const loginCmd = config.crackedAuth.loginCommand.replace(/{password}/g, password)
-    bot.chat(loginCmd)
-    console.log('🔑 Sent login command')
-    isAuthenticated = true
-  }
-}
+   bot.once('spawn', () => {
+      console.log('\x1b[33m[AfkBot] Bot joined the server', '\x1b[0m');
 
-// =====================
-// Walking Patterns
-// =====================
-let walkingPattern = 'circle'
-let walkingStep = 0
-let isWalking = false
+      if (config.utils['auto-auth'].enabled) {
+         console.log('[INFO] Started auto-auth module');
 
-function performWalkingPattern() {
-  if (isWalking) return
-  isWalking = true
-  walkingStep++
-  
-  if (walkingStep % 20 === 0) {
-    const patterns = ['circle', 'square', 'back_forth', 'random_walk']
-    walkingPattern = patterns[Math.floor(Math.random() * patterns.length)]
-    walkingStep = 1
-  }
-  
-  switch(walkingPattern) {
-    case 'circle': performCircleWalk(); break
-    case 'square': performSquareWalk(); break
-    case 'back_forth': performBackForthWalk(); break
-    case 'random_walk': performRandomWalk(); break
-  }
+         const password = config.utils['auto-auth'].password;
 
-  // Add natural human-like actions while walking
-  addPlayerLikeActions(bot)
-}
-
-function performCircleWalk() {
-  const angle = (walkingStep * 18) * (Math.PI / 180)
-  bot.look(angle, 0)
-  bot.setControlState('forward', true)
-  setTimeout(() => { bot.setControlState('forward', false); isWalking = false }, 1500)
-}
-
-function performSquareWalk() {
-  const direction = Math.floor((walkingStep - 1) / 5) % 4
-  const angles = [0, Math.PI/2, Math.PI, 3*Math.PI/2]
-  bot.look(angles[direction], 0)
-  bot.setControlState('forward', true)
-  setTimeout(() => { bot.setControlState('forward', false); isWalking = false }, 1000)
-}
-
-function performBackForthWalk() {
-  const forward = (walkingStep % 10) < 5
-  bot.look(forward ? 0 : Math.PI, 0)
-  bot.setControlState('forward', true)
-  setTimeout(() => { bot.setControlState('forward', false); isWalking = false }, 1200)
-}
-
-function performRandomWalk() {
-  const randomYaw = Math.random() * 2 * Math.PI
-  const randomPitch = (Math.random() - 0.5) * 0.3
-  bot.look(randomYaw, randomPitch)
-  
-  const moves = [
-    () => bot.setControlState('forward', true),
-    () => bot.setControlState('back', true),
-    () => bot.setControlState('left', true),
-    () => bot.setControlState('right', true),
-    () => { bot.setControlState('jump', true); bot.setControlState('forward', true) }
-  ]
-  const move = moves[Math.floor(Math.random() * moves.length)]
-  move()
-  
-  setTimeout(() => {
-    bot.clearControlStates()
-    isWalking = false
-  }, 800)
-}
-
-// =====================
-// Extra Player-Like Actions
-// =====================
-function addPlayerLikeActions(bot) {
-  // Randomly sneak
-  if (Math.random() < 0.2) {
-    bot.setControlState('sneak', true)
-    setTimeout(() => bot.setControlState('sneak', false), 2000 + Math.random() * 3000)
-  }
-
-  // Randomly sprint
-  if (Math.random() < 0.3) {
-    bot.setControlState('sprint', true)
-    setTimeout(() => bot.setControlState('sprint', false), 3000 + Math.random() * 4000)
-  }
-
-  // Randomly jump
-  if (Math.random() < 0.4) {
-    bot.setControlState('jump', true)
-    setTimeout(() => bot.setControlState('jump', false), 500)
-  }
-
-  // Randomly look around
-  if (Math.random() < 0.5) {
-    const yaw = bot.entity.yaw + (Math.random() - 0.5) * Math.PI
-    const pitch = (Math.random() - 0.5) * 0.3
-    bot.look(yaw, pitch, true)
-  }
-}
-
-// =====================
-// Anti-AFK Features
-// =====================
-function startAntiAfkFeatures() {
-  console.log('🔄 Starting anti-AFK features...')
-  
-  if (config.antiAfk.movementInterval > 0) {
-    movementInterval = setInterval(() => {
-      if (bot && bot.entity) {
-        performWalkingPattern()
-        console.log(`🚶 Walking pattern: ${walkingPattern} (step ${walkingStep})`)
+         pendingPromise = pendingPromise
+            .then(() => sendRegister(password))
+            .then(() => sendLogin(password))
+            .catch(error => console.error('[ERROR]', error));
       }
-    }, config.antiAfk.movementInterval)
-  }
 
-  if (config.antiAfk.chatInterval > 0 && config.antiAfk.messages.length > 0) {
-    chatInterval = setInterval(() => {
-      if (bot && bot.entity) {
-        const msg = config.antiAfk.messages[Math.floor(Math.random() * config.antiAfk.messages.length)]
-        bot.chat(msg)
-        console.log('💬 Sent anti-AFK message:', msg)
+      if (config.utils['chat-messages'].enabled) {
+         console.log('[INFO] Started chat-messages module');
+         const messages = config.utils['chat-messages']['messages'];
+
+         if (config.utils['chat-messages'].repeat) {
+            const delay = config.utils['chat-messages']['repeat-delay'];
+            let i = 0;
+
+            let msg_timer = setInterval(() => {
+               bot.chat(`${messages[i]}`);
+
+               if (i + 1 === messages.length) {
+                  i = 0;
+               } else {
+                  i++;
+               }
+            }, delay * 1000);
+         } else {
+            messages.forEach((msg) => {
+               bot.chat(msg);
+            });
+         }
       }
-    }, config.antiAfk.chatInterval)
-  }
+
+      const pos = config.position;
+
+      if (config.position.enabled) {
+         console.log(
+            `\x1b[32m[Afk Bot] Starting to move to target location (${pos.x}, ${pos.y}, ${pos.z})\x1b[0m`
+         );
+         bot.pathfinder.setMovements(defaultMove);
+         bot.pathfinder.setGoal(new GoalBlock(pos.x, pos.y, pos.z));
+      }
+
+      if (config.utils['anti-afk'].enabled) {
+         bot.setControlState('jump', true);
+         if (config.utils['anti-afk'].sneak) {
+            bot.setControlState('sneak', true);
+         }
+      }
+   });
+
+   bot.on('goal_reached', () => {
+      console.log(
+         `\x1b[32m[AfkBot] Bot arrived at the target location. ${bot.entity.position}\x1b[0m`
+      );
+   });
+
+   bot.on('death', () => {
+      console.log(
+         `\x1b[33m[AfkBot] Bot has died and was respawned at ${bot.entity.position}`,
+         '\x1b[0m'
+      );
+   });
+
+   if (config.utils['auto-reconnect']) {
+      bot.on('end', () => {
+         setTimeout(() => {
+            createBot();
+         }, config.utils['auto-recconect-delay']);
+      });
+   }
+
+   bot.on('kicked', (reason) =>
+      console.log(
+         '\x1b[33m',
+         `[AfkBot] Bot was kicked from the server. Reason: \n${reason}`,
+         '\x1b[0m'
+      )
+   );
+
+   bot.on('error', (err) =>
+      console.log(`\x1b[31m[ERROR] ${err.message}`, '\x1b[0m')
+   );
 }
 
-function stopAntiAfkFeatures() {
-  if (movementInterval) clearInterval(movementInterval)
-  if (chatInterval) clearInterval(chatInterval)
-  movementInterval = null
-  chatInterval = null
-  if (bot && bot.entity) bot.clearControlStates()
-  isWalking = false
-}
+createBot();
 
-// =====================
-// Disconnect / Reconnect
-// =====================
-function handleDisconnect() {
-  if (reconnectTimeout) return
-  stopAntiAfkFeatures()
-
-  if (config.reconnect.enabled && (config.reconnect.maxRetries === -1 || retryCount < config.reconnect.maxRetries)) {
-    retryCount++
-    console.log(`⏳ Reconnecting in ${config.reconnect.delay / 1000}s... (Attempt ${retryCount})`)
-    reconnectTimeout = setTimeout(() => { reconnectTimeout = null; createBot() }, config.reconnect.delay)
-  } else {
-    console.log('❌ Max reconnection attempts reached. Exiting...')
-    process.exit(1)
-  }
-}
-
-// Graceful shutdown
-function gracefulShutdown() {
-  console.log('\n🛑 Shutting down bot...')
-  stopAntiAfkFeatures()
-  if (reconnectTimeout) clearTimeout(reconnectTimeout)
-  if (bot) bot.quit('Bot shutting down')
-  process.exit(0)
-}
-
-process.on('SIGINT', gracefulShutdown)
-process.on('SIGTERM', gracefulShutdown)
-
-// Start the bot
-console.log('🤖 Starting Minecraft AFK Bot...')
-createBot()
 
 // Web server (Render/UptimeRobot ping)
 const express = require('express')
