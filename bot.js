@@ -30,7 +30,6 @@ function createBot() {
 
   bot.on('login', () => {
     console.log(`✓ Bot logged in as ${bot.username}`)
-    console.log(`✓ Connected to server: ${config.server.host}:${config.server.port}`)
     retryCount = 0
     isAuthenticated = false
   })
@@ -39,7 +38,6 @@ function createBot() {
     console.log('✓ Bot spawned in the world')
     console.log(`Position: ${bot.entity.position}`)
     
-    // Start anti-AFK features
     if (config.antiAfk.enabled) {
       startAntiAfkFeatures()
     }
@@ -49,7 +47,6 @@ function createBot() {
     if (username === bot.username) return
     console.log(`[CHAT] ${username}: ${message}`)
     
-    // Handle cracked server authentication
     if (config.crackedAuth.enabled && !isAuthenticated) {
       handleAuthentication(message)
     }
@@ -78,16 +75,18 @@ function createBot() {
   })
 }
 
+// =====================
+// Authentication (cracked servers)
+// =====================
 function handleAuthentication(message) {
   if (!config.crackedAuth.enabled) return
   
   const password = process.env[config.crackedAuth.passwordEnvVar]
   if (!password) {
-    console.log('⚠️ Cracked auth enabled but no password found in environment variable:', config.crackedAuth.passwordEnvVar)
+    console.log('⚠️ No cracked password found in env var:', config.crackedAuth.passwordEnvVar)
     return
   }
 
-  // Check for common authentication prompts
   const lowerMessage = message.toLowerCase()
   
   if (config.crackedAuth.autoRegister && (lowerMessage.includes('register') || lowerMessage.includes('/register'))) {
@@ -103,17 +102,18 @@ function handleAuthentication(message) {
   }
 }
 
+// =====================
+// Walking Patterns
+// =====================
 let walkingPattern = 'circle'
 let walkingStep = 0
 let isWalking = false
 
 function performWalkingPattern() {
-  if (isWalking) return // Prevent overlapping movements
-  
+  if (isWalking) return
   isWalking = true
   walkingStep++
   
-  // Switch patterns occasionally for variety
   if (walkingStep % 20 === 0) {
     const patterns = ['circle', 'square', 'back_forth', 'random_walk']
     walkingPattern = patterns[Math.floor(Math.random() * patterns.length)]
@@ -121,102 +121,95 @@ function performWalkingPattern() {
   }
   
   switch(walkingPattern) {
-    case 'circle':
-      performCircleWalk()
-      break
-    case 'square':
-      performSquareWalk()
-      break
-    case 'back_forth':
-      performBackForthWalk()
-      break
-    case 'random_walk':
-      performRandomWalk()
-      break
+    case 'circle': performCircleWalk(); break
+    case 'square': performSquareWalk(); break
+    case 'back_forth': performBackForthWalk(); break
+    case 'random_walk': performRandomWalk(); break
   }
+
+  // Add natural human-like actions while walking
+  addPlayerLikeActions(bot)
 }
 
 function performCircleWalk() {
-  // Walk in a circle by turning slightly and moving forward
-  const angle = (walkingStep * 18) * (Math.PI / 180) // 18 degrees per step
+  const angle = (walkingStep * 18) * (Math.PI / 180)
   bot.look(angle, 0)
-  
   bot.setControlState('forward', true)
-  setTimeout(() => {
-    bot.setControlState('forward', false)
-    isWalking = false
-  }, 1500)
+  setTimeout(() => { bot.setControlState('forward', false); isWalking = false }, 1500)
 }
 
 function performSquareWalk() {
-  // Walk in a square pattern
-  const direction = Math.floor((walkingStep - 1) / 5) % 4 // 5 steps per side
-  const angles = [0, Math.PI/2, Math.PI, 3*Math.PI/2] // N, E, S, W
-  
+  const direction = Math.floor((walkingStep - 1) / 5) % 4
+  const angles = [0, Math.PI/2, Math.PI, 3*Math.PI/2]
   bot.look(angles[direction], 0)
-  
   bot.setControlState('forward', true)
-  setTimeout(() => {
-    bot.setControlState('forward', false)
-    isWalking = false
-  }, 1000)
+  setTimeout(() => { bot.setControlState('forward', false); isWalking = false }, 1000)
 }
 
 function performBackForthWalk() {
-  // Walk back and forth
   const forward = (walkingStep % 10) < 5
-  
-  if (forward) {
-    bot.look(0, 0) // North
-    bot.setControlState('forward', true)
-  } else {
-    bot.look(Math.PI, 0) // South
-    bot.setControlState('forward', true)
-  }
-  
-  setTimeout(() => {
-    bot.setControlState('forward', false)
-    isWalking = false
-  }, 1200)
+  bot.look(forward ? 0 : Math.PI, 0)
+  bot.setControlState('forward', true)
+  setTimeout(() => { bot.setControlState('forward', false); isWalking = false }, 1200)
 }
 
 function performRandomWalk() {
-  // Random direction and movement
   const randomYaw = Math.random() * 2 * Math.PI
   const randomPitch = (Math.random() - 0.5) * 0.3
-  
   bot.look(randomYaw, randomPitch)
   
-  // Mix of different movements
-  const movements = [
-    () => { bot.setControlState('forward', true); return 'forward' },
-    () => { bot.setControlState('back', true); return 'back' },
-    () => { bot.setControlState('left', true); return 'strafe left' },
-    () => { bot.setControlState('right', true); return 'strafe right' },
-    () => { 
-      bot.setControlState('jump', true)
-      bot.setControlState('forward', true)
-      return 'jump forward'
-    }
+  const moves = [
+    () => bot.setControlState('forward', true),
+    () => bot.setControlState('back', true),
+    () => bot.setControlState('left', true),
+    () => bot.setControlState('right', true),
+    () => { bot.setControlState('jump', true); bot.setControlState('forward', true) }
   ]
-  
-  const movement = movements[Math.floor(Math.random() * movements.length)]
-  const action = movement()
+  const move = moves[Math.floor(Math.random() * moves.length)]
+  move()
   
   setTimeout(() => {
-    bot.setControlState('forward', false)
-    bot.setControlState('back', false)
-    bot.setControlState('left', false)
-    bot.setControlState('right', false)
-    bot.setControlState('jump', false)
+    bot.clearControlStates()
     isWalking = false
   }, 800)
 }
 
+// =====================
+// Extra Player-Like Actions
+// =====================
+function addPlayerLikeActions(bot) {
+  // Randomly sneak
+  if (Math.random() < 0.2) {
+    bot.setControlState('sneak', true)
+    setTimeout(() => bot.setControlState('sneak', false), 2000 + Math.random() * 3000)
+  }
+
+  // Randomly sprint
+  if (Math.random() < 0.3) {
+    bot.setControlState('sprint', true)
+    setTimeout(() => bot.setControlState('sprint', false), 3000 + Math.random() * 4000)
+  }
+
+  // Randomly jump
+  if (Math.random() < 0.4) {
+    bot.setControlState('jump', true)
+    setTimeout(() => bot.setControlState('jump', false), 500)
+  }
+
+  // Randomly look around
+  if (Math.random() < 0.5) {
+    const yaw = bot.entity.yaw + (Math.random() - 0.5) * Math.PI
+    const pitch = (Math.random() - 0.5) * 0.3
+    bot.look(yaw, pitch, true)
+  }
+}
+
+// =====================
+// Anti-AFK Features
+// =====================
 function startAntiAfkFeatures() {
   console.log('🔄 Starting anti-AFK features...')
   
-  // Enhanced movement patterns to prevent AFK kick
   if (config.antiAfk.movementInterval > 0) {
     movementInterval = setInterval(() => {
       if (bot && bot.entity) {
@@ -226,75 +219,49 @@ function startAntiAfkFeatures() {
     }, config.antiAfk.movementInterval)
   }
 
-  // Occasional chat messages
   if (config.antiAfk.chatInterval > 0 && config.antiAfk.messages.length > 0) {
     chatInterval = setInterval(() => {
       if (bot && bot.entity) {
-        const randomMessage = config.antiAfk.messages[Math.floor(Math.random() * config.antiAfk.messages.length)]
-        bot.chat(randomMessage)
-        console.log('💬 Sent anti-AFK message:', randomMessage)
+        const msg = config.antiAfk.messages[Math.floor(Math.random() * config.antiAfk.messages.length)]
+        bot.chat(msg)
+        console.log('💬 Sent anti-AFK message:', msg)
       }
     }, config.antiAfk.chatInterval)
   }
 }
 
 function stopAntiAfkFeatures() {
-  if (movementInterval) {
-    clearInterval(movementInterval)
-    movementInterval = null
-  }
-  if (chatInterval) {
-    clearInterval(chatInterval)
-    chatInterval = null
-  }
-  
-  // Stop any ongoing movement
-  if (bot && bot.entity) {
-    bot.setControlState('forward', false)
-    bot.setControlState('back', false)
-    bot.setControlState('left', false)
-    bot.setControlState('right', false)
-    bot.setControlState('jump', false)
-    bot.setControlState('sneak', false)
-  }
-  
+  if (movementInterval) clearInterval(movementInterval)
+  if (chatInterval) clearInterval(chatInterval)
+  movementInterval = null
+  chatInterval = null
+  if (bot && bot.entity) bot.clearControlStates()
   isWalking = false
 }
 
+// =====================
+// Disconnect / Reconnect
+// =====================
 function handleDisconnect() {
-  // Prevent multiple simultaneous reconnection attempts
-  if (reconnectTimeout) {
-    console.log('🔄 Reconnection already scheduled, skipping...')
-    return
-  }
-  
+  if (reconnectTimeout) return
   stopAntiAfkFeatures()
 
   if (config.reconnect.enabled && (config.reconnect.maxRetries === -1 || retryCount < config.reconnect.maxRetries)) {
     retryCount++
-    console.log(`⏳ Reconnecting in ${config.reconnect.delay / 1000} seconds... (Attempt ${retryCount})`)
-    
-    reconnectTimeout = setTimeout(() => {
-      reconnectTimeout = null // Clear the timeout reference
-      createBot()
-    }, config.reconnect.delay)
+    console.log(`⏳ Reconnecting in ${config.reconnect.delay / 1000}s... (Attempt ${retryCount})`)
+    reconnectTimeout = setTimeout(() => { reconnectTimeout = null; createBot() }, config.reconnect.delay)
   } else {
-    console.log('❌ Max reconnection attempts reached or reconnection disabled. Exiting...')
+    console.log('❌ Max reconnection attempts reached. Exiting...')
     process.exit(1)
   }
 }
 
-// Handle graceful shutdown
+// Graceful shutdown
 function gracefulShutdown() {
   console.log('\n🛑 Shutting down bot...')
   stopAntiAfkFeatures()
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout)
-    reconnectTimeout = null
-  }
-  if (bot) {
-    bot.quit('Bot shutting down')
-  }
+  if (reconnectTimeout) clearTimeout(reconnectTimeout)
+  if (bot) bot.quit('Bot shutting down')
   process.exit(0)
 }
 
@@ -303,25 +270,11 @@ process.on('SIGTERM', gracefulShutdown)
 
 // Start the bot
 console.log('🤖 Starting Minecraft AFK Bot...')
-console.log('Configuration loaded:')
-console.log(`- Server: ${config.server.host}:${config.server.port}`)
-console.log(`- Username: ${config.bot.username}`)
-console.log(`- Auth: ${config.bot.auth}`)
-console.log(`- Cracked Auth: ${config.crackedAuth.enabled ? 'Enabled' : 'Disabled'}`)
-console.log(`- Anti-AFK: ${config.antiAfk.enabled ? 'Enabled' : 'Disabled'}`)
-console.log(`- Auto-reconnect: ${config.reconnect.enabled ? 'Enabled' : 'Disabled'}`)
-console.log('---')
-
 createBot()
-// Simple Express web server for Render + Freshping
-const express = require('express');
-const app = express();
 
-app.get('/', (req, res) => {
-  res.send('🤖 AFK Bot is running!');
-});
-
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`🌐 Web server running on port ${port}`);
-});
+// Web server (Render/UptimeRobot ping)
+const express = require('express')
+const app = express()
+app.get('/', (req, res) => res.send('🤖 AFK Bot is running!'))
+const port = process.env.PORT || 3000
+app.listen(port, () => console.log(`🌐 Web server running on port ${port}`))
