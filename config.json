@@ -1,0 +1,35 @@
+{
+  "server": {
+    "host": "bloodbath321.aternos.me",
+    "port": 16708,
+    "version": "1.20.1"
+  },
+  "bot": {
+    "username": "AFKBot",
+    "auth": "offline"
+  },
+  "crackedAuth": {
+    "enabled": false,
+    "autoRegister": true,
+    "autoLogin": true,
+    "registerCommand": "/register {password} {password}",
+    "loginCommand": "/login {password}",
+    "passwordEnvVar": "MINECRAFT_PASSWORD"
+  },
+  "antiAfk": {
+    "enabled": true,
+    "movementInterval": 30000,
+    "chatInterval": 300000,
+    "messages": [
+      "Still here!",
+      "AFK bot online",
+      "Keeping server active"
+    ],
+    "handleDeath": true
+  },
+  "reconnect": {
+    "enabled": true,
+    "delay": 5000,
+    "maxRetries": -1
+  }
+}
