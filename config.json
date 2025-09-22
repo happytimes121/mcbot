@@ -19,7 +19,7 @@
   "antiAfk": {
     "enabled": true,
     "movementInterval": 30000,
-    "chatInterval": 300000,
+    "chatInterval": 120000,
     "messages": [
       "Still here!",
       "AFK bot online",
