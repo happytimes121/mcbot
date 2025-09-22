@@ -1,16 +1,16 @@
 {
   "bot-account": {
-    "username": "AFKBot", 
+    "username": "AFKBot",
     "password": "",
-    "type": "mojang"
+    "type": "offline"
   },
 
   "server": {
-    "ip": "bloodbath321.aternos.me.aternos.me", 
-    "port": 16708,   
-    "version": "1.12.1"   
+    "ip": "bloodbath321.aternos.me",
+    "port": 16708,
+    "version": "1.20.1"
   },
-  
+
   "position": {
     "enabled": false,
     "x": 0,
@@ -32,12 +32,11 @@
     "chat-messages": {
       "enabled": true,
       "repeat": true,
-      "repeat-delay": 60,
-
+      "repeat-delay": 120,
       "messages": [
         "I'm a regular player",
-        "Subscibe To Slobos!",
-        "I Like to Play Minecraft!"
+        "Subscribe to Slobos!",
+        "I like to play Minecraft!"
       ]
     },
 
