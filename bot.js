@@ -3,6 +3,7 @@ const { Movements, pathfinder, goals: { GoalBlock } } = require('mineflayer-path
 const config = require('./settings.json');
 const express = require('express');
 
+// --- Web server (for uptime services like Render/UptimeRobot) ---
 const app = express();
 app.get('/', (req, res) => res.send('🤖 AFK Bot is running!'));
 const port = process.env.PORT || 3000;
@@ -23,54 +24,46 @@ function createBot() {
    const defaultMove = new Movements(bot, mcData);
    bot.settings.colorsEnabled = false;
 
-   let pendingPromise = Promise.resolve();
-
-   // --- Auto Register ---
+   // --- Auto Register/Login ---
    function sendRegister(password) {
-      return new Promise((resolve) => {
-         bot.chat(`/register ${password} ${password}`);
-         console.log(`[Auth] Sent /register command.`);
-         resolve();
-      });
+      bot.chat(`/register ${password} ${password}`);
+      console.log(`[Auth] Sent /register command.`);
    }
 
-   // --- Auto Login ---
    function sendLogin(password) {
-      return new Promise((resolve) => {
-         bot.chat(`/login ${password}`);
-         console.log(`[Auth] Sent /login command.`);
-         resolve();
-      });
+      bot.chat(`/login ${password}`);
+      console.log(`[Auth] Sent /login command.`);
    }
 
    bot.once('spawn', () => {
       console.log('\x1b[33m[AfkBot] Bot joined the server\x1b[0m');
 
+      // --- Auto-auth module ---
       if (config.utils['auto-auth'].enabled) {
          console.log('[INFO] Started auto-auth module');
          const password = config.utils['auto-auth'].password;
-         pendingPromise = pendingPromise
-            .then(() => sendRegister(password))
-            .then(() => sendLogin(password))
-            .catch(error => console.error('[ERROR]', error));
+         sendRegister(password);
+         setTimeout(() => sendLogin(password), 2000);
       }
 
+      // --- Chat messages module ---
       if (config.utils['chat-messages'].enabled) {
          console.log('[INFO] Started chat-messages module');
          const messages = config.utils['chat-messages']['messages'];
+         let i = 0;
 
-         if (config.utils['chat-messages'].repeat) {
-            const delay = config.utils['chat-messages']['repeat-delay'];
-            let i = 0;
-            setInterval(() => {
-               bot.chat(messages[i]);
-               i = (i + 1) % messages.length;
-            }, delay * 1000);
-         } else {
-            messages.forEach((msg) => bot.chat(msg));
-         }
+         // Send first message immediately
+         bot.chat(messages[i]);
+         i = (i + 1) % messages.length;
+
+         // Then every 2 minutes
+         setInterval(() => {
+            bot.chat(messages[i]);
+            i = (i + 1) % messages.length;
+         }, 2 * 60 * 1000);
       }
 
+      // --- Move to position ---
       if (config.position.enabled) {
          const pos = config.position;
          console.log(
@@ -80,6 +73,7 @@ function createBot() {
          bot.pathfinder.setGoal(new GoalBlock(pos.x, pos.y, pos.z));
       }
 
+      // --- Anti-AFK ---
       if (config.utils['anti-afk'].enabled) {
          bot.setControlState('jump', true);
          if (config.utils['anti-afk'].sneak) {
@@ -114,6 +108,9 @@ function createBot() {
       console.log(`\x1b[31m[ERROR] ${err.message}\x1b[0m`);
    });
 }
+
+createBot();
+
 
 createBot();
 
