@@ -1,34 +1,50 @@
-const mineflayer = require("mineflayer");
+const mineflayer = require('mineflayer');
+const fs = require('fs');
 
-let bot;
+// Load settings
+let settings;
+try {
+  settings = JSON.parse(fs.readFileSync('settings.json', 'utf8'));
+} catch (err) {
+  console.error('Failed to read settings.json:', err);
+  process.exit(1);
+}
+
+let bot = null;
+
 function startBot() {
+  const account = settings['bot-account'];
+  const server = settings.server;
+  const reconnectDelay = settings.reconnect?.delay || 10000;
+
   bot = mineflayer.createBot({
-    host: "yourserver.aternos.me", // 🔹 change to your server IP
-    port: 25565,                   // 🔹 change if needed
-    username: "AFKBot"
+    host: server.ip,
+    port: server.port,
+    username: account.username,
+    password: account.password || undefined,
+    auth: account.type || 'offline',
+    version: server.version
   });
 
-  // ignore chat messages
-  bot.on("message", () => {});
+  // ignore all chat messages
+  bot.on('message', () => {});
 
-  // walk forward forever once spawned
-  bot.once("spawn", () => {
-    console.log("Bot spawned, walking forward...");
-    bot.setControlState("forward", true);
+  bot.once('spawn', () => {
+    console.log(`Bot spawned as ${account.username}, walking forward...`);
+    bot.setControlState('forward', true);
   });
 
-  // handle disconnects
-  bot.on("end", () => {
-    console.log("Bot disconnected. Reconnecting in 10s...");
-    setTimeout(startBot, 10 * 1000);
+  bot.on('end', () => {
+    console.log(`Bot disconnected. Reconnecting in ${reconnectDelay / 1000} seconds...`);
+    setTimeout(startBot, reconnectDelay);
   });
 
-  bot.on("kicked", (reason) => {
-    console.log("Bot kicked:", reason);
+  bot.on('kicked', (reason) => {
+    console.log('Bot was kicked:', reason);
   });
 
-  bot.on("error", (err) => {
-    console.log("Bot error:", err);
+  bot.on('error', (err) => {
+    console.error('Bot error:', err);
   });
 }
 
