@@ -1,19 +1,18 @@
-const mineflayer = require('mineflayer');
-const fs = require('fs');
+const mineflayer = require("mineflayer");
+const fs = require("fs");
 
-// Load settings
 let settings;
 try {
-  settings = JSON.parse(fs.readFileSync('settings.json', 'utf8'));
+  settings = JSON.parse(fs.readFileSync("settings.json", "utf8"));
 } catch (err) {
-  console.error('Failed to read settings.json:', err);
+  console.error("❌ Failed to read settings.json:", err);
   process.exit(1);
 }
 
 let bot = null;
 
 function startBot() {
-  const account = settings['bot-account'];
+  const account = settings["bot-account"];
   const server = settings.server;
   const reconnectDelay = settings.reconnect?.delay || 10000;
 
@@ -22,31 +21,34 @@ function startBot() {
     port: server.port,
     username: account.username,
     password: account.password || undefined,
-    auth: account.type || 'offline',
+    auth: account.type || "offline",
     version: server.version
   });
 
-  // ignore all chat messages
-  bot.on('message', () => {});
+  // Ignore chat
+  bot.on("message", () => {});
 
-  bot.once('spawn', () => {
-    console.log(`Bot spawned as ${account.username}, walking forward...`);
-    bot.setControlState('forward', true);
+  // Start walking forward when spawned
+  bot.once("spawn", () => {
+    console.log(`✅ Bot ${account.username} spawned. Walking forward...`);
+    bot.setControlState("forward", true);
   });
 
-  bot.on('end', () => {
-    console.log(`Bot disconnected. Reconnecting in ${reconnectDelay / 1000} seconds...`);
+  // Reconnect on disconnect
+  bot.on("end", () => {
+    console.log(`⚠️ Bot disconnected. Reconnecting in ${reconnectDelay / 1000}s...`);
     setTimeout(startBot, reconnectDelay);
   });
 
-  bot.on('kicked', (reason) => {
-    console.log('Bot was kicked:', reason);
+  // Log kick messages
+  bot.on("kicked", (reason) => {
+    console.log("❌ Bot kicked:", reason);
   });
 
-  bot.on('error', (err) => {
-    console.error('Bot error:', err);
+  // Handle errors like EPIPE
+  bot.on("error", (err) => {
+    console.error("⚠️ Bot error:", err.message);
   });
 }
 
-// start the bot
 startBot();
