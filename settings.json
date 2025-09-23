@@ -5,7 +5,7 @@
     "type": "offline"
   },
   "server": {
-    "ip": "bloodbathsmp.aternos.me",
+    "ip": "bloodbathsmp.aternos.me:15717",
     "port": 15717,
     "version": "1.20.1"
   },
