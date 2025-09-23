@@ -6,7 +6,7 @@
   },
   "server": {
     "ip": "bloodbathsmp.aternos.me",
-    "port": 16708,
+    "port": 15717,
     "version": "1.20.1"
   },
   "reconnect": {
