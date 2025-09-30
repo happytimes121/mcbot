@@ -7,9 +7,9 @@
   "server": {
     "ip": "bloodbathsmp.aternos.me",
     "port": 15717,
-    "version": "1.21.8"
+    "version": "1.21.9"
   },
   "reconnect": {
-    "delay": 10000
+    "delay": 60000
   }
 }
