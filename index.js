@@ -1,5 +1,10 @@
 import mineflayer from 'mineflayer';
-import settings from './settings.json' assert { type: 'json' };
+import fs from 'fs';
+import path from 'path';
+
+// Load settings.json
+const settingsPath = path.resolve('./settings.json');
+const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
 
 function startBot() {
   const bot = mineflayer.createBot({
@@ -12,7 +17,7 @@ function startBot() {
 
   bot.on('spawn', () => {
     console.log("✅ Bot has spawned, walking forward...");
-    bot.setControlState('forward', true); // keeps moving forward
+    bot.setControlState('forward', true); // infinite forward walking
   });
 
   bot.on('end', () => {
