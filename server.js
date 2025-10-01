@@ -5,7 +5,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-  res.send("✅ AFK Bot is running!");
+  res.send("🤖 The bot is live!!!!!!!!!🐢");
 });
 
 app.listen(PORT, () => {
