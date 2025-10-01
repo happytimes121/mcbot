@@ -6,8 +6,13 @@ function startBot() {
     host: settings.server.ip,
     port: settings.server.port,
     username: settings["bot-account"].username,
-    version: settings.server.version, // <---- important!
+    version: settings.server.version,
     auth: settings["bot-account"].type
+  });
+
+  bot.on('spawn', () => {
+    console.log("✅ Bot has spawned, walking forward...");
+    bot.setControlState('forward', true); // keeps moving forward
   });
 
   bot.on('end', () => {
