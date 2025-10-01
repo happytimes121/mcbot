@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "mineflayer": "^4.20.1"   // latest as of now
+    "mineflayer": "^4.20.1"   
   }
 }
